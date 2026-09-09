@@ -10,12 +10,11 @@ import sqlite3
 from contextlib import contextmanager
 import os
 
-BOT_TOKEN = os.environ["8775216762:AAEGOu8WRIRTGafuKeTc9v5O7uimpstGm3w"]
+BOT_TOKEN = os.environ["8651415048:AAEL85qoKFvIexGyqIIZZxoIoj6yth7bAPA"]
 
 ADMIN_IDS = [
     user_id.strip()
-    for user_id in os.environ.get("ADMIN_IDS", "6537847588").split(",")
-    if user_id.strip()
+    for user_id in os.environ.get("ADMIN_IDS","6537847588")
 ]
 
 FORWARD_CHANNEL = os.environ.get("FORWARD_CHANNEL", "dgd")
