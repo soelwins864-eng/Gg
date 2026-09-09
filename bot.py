@@ -8,11 +8,17 @@ import numpy as np
 from datetime import datetime, timedelta, timezone
 import sqlite3
 from contextlib import contextmanager
+import os
 
-# --- Configuration 
-BOT_TOKEN = "8775216762:AAEGOu8WRIRTGafuKeTc9v5O7uimpstGm3w"
-ADMIN_IDS = ["6537847588", "8320683349"]
-FORWARD_CHANNEL = "@primekenobot"
+BOT_TOKEN = os.environ["8775216762:AAEGOu8WRIRTGafuKeTc9v5O7uimpstGm3w"]
+
+ADMIN_IDS = [
+    user_id.strip()
+    for user_id in os.environ.get("ADMIN_IDS", "6537847588").split(",")
+    if user_id.strip()
+]
+
+FORWARD_CHANNEL = os.environ.get("FORWARD_CHANNEL", "dgd")
 
 # --- SPEED CONFIGURATION ---
 MAX_CONCURRENT = 10
