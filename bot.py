@@ -15,10 +15,10 @@ ADMIN_IDS = ["6537847588", "8320683349"]
 FORWARD_CHANNEL = "@primekenobot"
 
 # --- SPEED CONFIGURATION ---
-MAX_CONCURRENT = 300
+MAX_CONCURRENT = 10
 BATCH_SIZE = 1000
-CONNECTION_LIMIT = 30000
-CONNECTION_PER_HOST = 15000
+CONNECTION_LIMIT = 300
+CONNECTION_PER_HOST = 100
 TIMEOUT = 25
 
 # --- Local Storage Setup ---
@@ -76,11 +76,7 @@ _voucher_sem = None
 _start_time = time.monotonic()
 
 # --- Proxy List (3 Proxies - ONLY for URL checking) ---
-PROXY_LIST = [
-    "gzsvv1pggl7k:3g9xpulazhkz2c2@65.111.5.6:3129",
-    "y2g26w7t3tv4:p5ouenejkn07fvy@209.50.179.187:3129",
-    "gdllkdvi6mhq:04l2fmxbv72tzkl@65.111.2.10:3129"
-]
+PROXY_LIST = []
 
 _proxy_index = 0
 def get_next_proxy():
