@@ -6,7 +6,7 @@ import ddddocr
 import numpy as np
 from datetime import datetime, timedelta, timezone
 
-BOT_TOKEN = ''8889706834:AAHppLiH8XMOcxsTTE6EVXY932q4XKCi5mQ"
+BOT_TOKEN = "8889706834:AAHppLiH8XMOcxsTTE6EVXY932q4XKCi5mQ"
 ADMIN_ID = "6537847588"
 SUCCESS_CODE = asyncio.Queue()
 bot = AsyncTeleBot(BOT_TOKEN)
