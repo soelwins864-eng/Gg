@@ -5,3 +5,4 @@ ddddocr
 aiogram
 uvloop
 requests
+flask
