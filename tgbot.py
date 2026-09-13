@@ -381,8 +381,8 @@ async def worker(worker_id, api_urls, headers, user_id):
                         sid_failures = 0
                     else:
                         sid_failures += 1
-                        if sid_failures >= 10:
-                            await asyncio.sleep(1)
+                        if sid_failures >= 20:
+                            await asyncio.sleep(2)
                             sid_failures = 0
                             continue
                         await asyncio.sleep(0.5)
