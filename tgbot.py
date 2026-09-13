@@ -33,7 +33,7 @@ PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
 MAX_CODES_PER_SID = 30           # ⭐ SID အသစ် မြန်မြန် ရှာမယ်
 NUM_WORKERS = 100               # ⭐ Worker ၁၀ ခု
-TIMEOUT_SEC = 15                  # ⭐ Timeout လျှော့
+TIMEOUT_SEC = 25                  # ⭐ Timeout လျှော့
 
 ADMIN_IDS = [6537847588]
 
@@ -357,7 +357,7 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                         sid_failures = 0
                     else:
                         sid_failures += 1
-                        if sid_failures >= 10:
+                        if sid_failures >= 20:
                             await asyncio.sleep(1)
                             sid_failures = 0
                             continue
