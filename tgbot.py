@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
 #  sirzipp.py — FINAL VERSION
-#  CURRENT_CODE KeyError Fix + Infinite Scan
+#  Dashboard Timeout Fix + 10s Update + Infinite Scan
 # =====================================================================================
 
 import os
@@ -334,7 +334,7 @@ async def check_single_access_code(session, code, current_session_id,
         await asyncio.sleep(0.01)
 
 
-# ── WORKER (Infinite Loop) ───────────────────────────────────────────────────
+# ── WORKER ───────────────────────────────────────────────────────────────────
 
 async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, user_id):
     ud = get_user_data(user_id)
@@ -384,11 +384,10 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                 codes_checked_this_session += 1
 
 
-# ── RUN SCANNER (CURRENT_CODE Fix) ───────────────────────────────────────────
+# ── RUN SCANNER ──────────────────────────────────────────────────────────────
 
 async def run_user_scanner(context, user_id):
     ud = get_user_data(user_id)
-    # ⭐ CURRENT_CODE ကို ဒီနေရာမှာ သတ်မှတ် (try block ရဲ့ အပြင်)
     ud["CURRENT_CODE"] = "----"
     try:
         ud["stats"] = {
@@ -422,7 +421,8 @@ async def run_user_scanner(context, user_id):
             if all(t.done() for t in worker_tasks):
                 break
 
-            if time.time() - last_update >= 3:
+            # ⭐ ၁၀ စက္ကန့်တစ်ခါ Update
+            if time.time() - last_update >= 10:
                 last_update = time.time()
                 stats = ud["stats"]
                 elapsed = time.time() - stats["start_time"]
@@ -449,11 +449,12 @@ async def run_user_scanner(context, user_id):
                         "\n━━━━━━━━━━━━━━━━━\n🔥 Last: " + last_log)
                 keyboard = [[InlineKeyboardButton("🛑 Stop", callback_data="stop_scan")]]
                 try:
+                    # ⭐ Timeout 30 စက္ကန့်
                     await asyncio.wait_for(
                         context.bot.edit_message_text(
                             chat_id=user_id, message_id=ud["dash_msg_id"],
                             text=text, reply_markup=InlineKeyboardMarkup(keyboard)),
-                        timeout=10.0
+                        timeout=30.0
                     )
                     print(f"[DASHBOARD] Updated: tried={stats['tried']}, hits={len(stats['valid_codes'])}")
                 except asyncio.TimeoutError:
