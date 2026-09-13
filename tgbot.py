@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
-#  sirzipp.py — FINAL VERSION (Fast Scan)
-#  NUM_WORKERS=10 + No Sleep + SID=500 + Timeout=15
+#  sirzipp.py — FINAL VERSION
+#  Speed Optimized (10 Workers) + Infinite Scan + CURRENT_CODE Fix
 # =====================================================================================
 
 import os
@@ -31,9 +31,9 @@ BOT_TOKEN = "8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
 PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
-MAX_CODES_PER_SID = 500           # ⭐ SID အသစ် မြန်မြန် ရှာမယ်
-NUM_WORKERS = 100                  # ⭐ Worker ၁၀ ခု
-TIMEOUT_SEC = 15                  # ⭐ Timeout လျှော့
+MAX_CODES_PER_SID = 30          # ⭐ SID အသစ် မြန်မြန်ရှာ
+NUM_WORKERS = 100                   # ⭐ Worker ၁၀ ခု
+TIMEOUT_SEC = 25                   # ⭐ Timeout ၁၅ စက္ကန့်
 
 ADMIN_IDS = [6537847588]
 
@@ -239,7 +239,7 @@ async def fetch_balance(active_token, code, retries=3, proxy=None):
                 if data.get("success") is False:
                     msg = data.get("message", "Unknown")
                     if "timed out" in msg.lower() and attempt < retries - 1:
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(1)
                         continue
                     return "N/A"
                 profile_name = data.get("profileName", None)
@@ -262,13 +262,13 @@ async def fetch_balance(active_token, code, retries=3, proxy=None):
                 return "📵: " + profile_name + ", ⏰: N/A"
         except Exception as e:
             if attempt < retries - 1:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1)
                 continue
             return "N/A"
     return "N/A"
 
 
-# ── CHECK SINGLE CODE ────────────────────────────────────────────────────────
+# ── CHECK SINGLE CODE (Optimized) ────────────────────────────────────────────
 
 async def check_single_access_code(session, code, current_session_id,
                                    login_url, captcha_base_url, verify_url,
@@ -329,12 +329,12 @@ async def check_single_access_code(session, code, current_session_id,
             ud["stats"]["limit_codes"].append(code)
             return
         retry_count += 1
-        if retry_count >= 2:   # ⭐ Retry 2 ခါပဲ
+        if retry_count >= 2:   # ⭐ Retry ၂ ခါပဲ
             return
-        # ⭐ Sleep မထည့်တော့ဘူး
+        await asyncio.sleep(0.001)
 
 
-# ── WORKER (Fast) ────────────────────────────────────────────────────────────
+# ── WORKER (Optimized - No Sleep) ────────────────────────────────────────────
 
 async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, user_id):
     ud = get_user_data(user_id)
@@ -376,7 +376,7 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                     continue
                 ud["stats"]["tried_codes"].add(code)
                 ud["CURRENT_CODE"] = code
-                # ⭐ await asyncio.sleep(0.001) ကို ဖျက်လိုက်ပါပြီ
+                # ⭐ sleep ဖျက်လိုက်ပါပြီ
                 await check_single_access_code(session, code, current_session_id,
                                                login_url, captcha_base_url,
                                                verify_url, headers, user_id, proxy=proxy)
@@ -421,8 +421,7 @@ async def run_user_scanner(context, user_id):
             if all(t.done() for t in worker_tasks):
                 break
 
-            # ⭐ ၅ စက္ကန့်တစ်ခါ Update
-            if time.time() - last_update >= 5:
+            if time.time() - last_update >= 10:
                 last_update = time.time()
                 stats = ud["stats"]
                 elapsed = time.time() - stats["start_time"]
