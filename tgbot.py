@@ -33,7 +33,7 @@ PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
 MAX_CODES_PER_SID = 30           # ⭐ SID အသစ် မြန်မြန် ရှာမယ်
 NUM_WORKERS = 100               # ⭐ Worker ၁၀ ခု
-TIMEOUT_SEC = 15                  # ⭐ Timeout လျှော့
+TIMEOUT_SEC = 25                  # ⭐ Timeout လျှော့
 
 ADMIN_IDS = [6537847588]
 
@@ -329,7 +329,7 @@ async def check_single_access_code(session, code, current_session_id,
             ud["stats"]["limit_codes"].append(code)
             return
         retry_count += 1
-        if retry_count >= 2:   # ⭐ Retry 2 ခါပဲ
+        if retry_count >= 1:   # ⭐ Retry 2 ခါပဲ
             return
         # ⭐ Sleep မထည့်တော့ဘူး
 
@@ -376,7 +376,7 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                     continue
                 ud["stats"]["tried_codes"].add(code)
                 ud["CURRENT_CODE"] = code
-                # ⭐ await asyncio.sleep(0.001) ကို ဖျက်လိုက်ပါပြီ
+                # ⭐ await asyncio.sleep(0.005) ကို ဖျက်လိုက်ပါပြီ
                 await check_single_access_code(session, code, current_session_id,
                                                login_url, captcha_base_url,
                                                verify_url, headers, user_id, proxy=proxy)
