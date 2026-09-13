@@ -382,7 +382,7 @@ async def worker(worker_id, api_urls, headers, user_id):
                     else:
                         sid_failures += 1
                         if sid_failures >= 20:
-                            await asyncio.sleep(2)
+                            await asyncio.sleep(1)
                             sid_failures = 0
                             continue
                         await asyncio.sleep(0.5)
@@ -473,7 +473,7 @@ async def run_user_scanner(context, user_id):
                         context.bot.edit_message_text(
                             chat_id=user_id, message_id=ud["dash_msg_id"],
                             text=text, reply_markup=InlineKeyboardMarkup(keyboard)),
-                        timeout=30.0
+                        timeout=15.0
                     )
                     print(f"[DASHBOARD] Updated: tried={stats['tried']}, hits={len(stats['valid_codes'])}")
                 except asyncio.TimeoutError:
