@@ -31,9 +31,9 @@ BOT_TOKEN = "8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
 PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
-MAX_CODES_PER_SID = 500           # ⭐ SID အသစ် မြန်မြန်ရှာ
-NUM_WORKERS = 50                  # ⭐ Worker 10 ခု
-TIMEOUT_SEC = 25                   # ⭐ Timeout ၁၅ စက္ကန့်
+MAX_CODES_PER_SID = 500000          # ⭐ SID အသစ် မြန်မြန်ရှာ
+NUM_WORKERS = 100                # ⭐ Worker ၁၀ ခု
+TIMEOUT_SEC = 25                  # ⭐ Timeout ၁၅ စက္ကန့်
 
 ADMIN_IDS = [6537847588]
 
@@ -329,7 +329,7 @@ async def check_single_access_code(session, code, current_session_id,
             ud["stats"]["limit_codes"].append(code)
             return
         retry_count += 1
-        if retry_count >= 2:   # ⭐ Retry ၂ ခါပဲ
+        if retry_count >= 1:   # ⭐ Retry ၂ ခါပဲ
             return
         await asyncio.sleep(0.001)
 
@@ -357,7 +357,7 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                         sid_failures = 0
                     else:
                         sid_failures += 1
-                        if sid_failures >= 20:
+                        if sid_failures >= 10:
                             await asyncio.sleep(1)
                             sid_failures = 0
                             continue
@@ -452,7 +452,7 @@ async def run_user_scanner(context, user_id):
                         context.bot.edit_message_text(
                             chat_id=user_id, message_id=ud["dash_msg_id"],
                             text=text, reply_markup=InlineKeyboardMarkup(keyboard)),
-                        timeout=25
+                        timeout=30.0
                     )
                     print(f"[DASHBOARD] Updated: tried={stats['tried']}, hits={len(stats['valid_codes'])}")
                 except asyncio.TimeoutError:
