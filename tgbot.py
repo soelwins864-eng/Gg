@@ -33,7 +33,7 @@ PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
 MAX_CODES_PER_SID = 30
 NUM_WORKERS = 100
-TIMEOUT_SEC = 15
+TIMEOUT_SEC = 25
 
 ADMIN_IDS = [6537847588]
 
@@ -382,7 +382,7 @@ async def worker(worker_id, api_urls, headers, user_id):
                     else:
                         sid_failures += 1
                         if sid_failures >= 20:
-                            await asyncio.sleep(1)
+                            await asyncio.sleep(2)
                             sid_failures = 0
                             continue
                         await asyncio.sleep(0.5)
