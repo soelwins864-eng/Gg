@@ -26,11 +26,11 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
 
 # ── CONFIGURATION ────────────────────────────────────────────────────────────
 
-BOT_TOKEN = "8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
+BOT_TOKEN = "8810710930:AAFy4nk31uptISK80W_KEZOa-FEfi5n3M4k"
 
 PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
-MAX_CODES_PER_SESSION = 999999999
+MAX_CODES_PER_SESSION = 30
 MAX_CODES_PER_SID = 30
 NUM_WORKERS = 100
 TIMEOUT_SEC = 15
