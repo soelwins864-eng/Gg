@@ -357,7 +357,7 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                         sid_failures = 0
                     else:
                         sid_failures += 1
-                        if sid_failures >= 10:
+                        if sid_failures >= 20:
                             await asyncio.sleep(1)
                             sid_failures = 0
                             continue
@@ -422,7 +422,7 @@ async def run_user_scanner(context, user_id):
                 break
 
             # ⭐ ၅ စက္ကန့်တစ်ခါ Update
-            if time.time() - last_update >= 5:
+            if time.time() - last_update >= 1:
                 last_update = time.time()
                 stats = ud["stats"]
                 elapsed = time.time() - stats["start_time"]
