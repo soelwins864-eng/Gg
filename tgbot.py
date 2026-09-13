@@ -422,7 +422,7 @@ async def run_user_scanner(context, user_id):
                 break
 
             # ⭐ ၅ စက္ကန့်တစ်ခါ Update
-            if time.time() - last_update >= 3:
+            if time.time() - last_update >= 5:
                 last_update = time.time()
                 stats = ud["stats"]
                 elapsed = time.time() - stats["start_time"]
