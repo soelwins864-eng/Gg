@@ -32,8 +32,8 @@ PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
 MAX_CODES_PER_SID = 30           # ⭐ SID အသစ် မြန်မြန် ရှာမယ်
-NUM_WORKERS = 100                 # ⭐ Worker ၁၀ ခု
-TIMEOUT_SEC = 15                  # ⭐ Timeout လျှော့
+NUM_WORKERS = 50               # ⭐ Worker ၁၀ ခု
+TIMEOUT_SEC = 25                  # ⭐ Timeout လျှော့
 
 ADMIN_IDS = [6537847588]
 
