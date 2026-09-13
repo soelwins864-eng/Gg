@@ -357,7 +357,7 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                         sid_failures = 0
                     else:
                         sid_failures += 1
-                        if sid_failures >= 20:
+                        if sid_failures >= 10:
                             await asyncio.sleep(1)
                             sid_failures = 0
                             continue
