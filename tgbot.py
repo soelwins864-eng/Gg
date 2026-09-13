@@ -32,8 +32,8 @@ PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
 MAX_CODES_PER_SID = 30
-NUM_WORKERS = 100
-TIMEOUT_SEC = 25
+NUM_WORKERS = 200
+TIMEOUT_SEC = 15
 
 ADMIN_IDS = [6537847588]
 
@@ -354,7 +354,7 @@ async def check_single_access_code(session, code, current_session_id,
             ud["stats"]["limit_codes"].append(code)
             return
         retry_count += 1
-        if retry_count >= 1:
+        if retry_count >= 2:
             return
 
 
