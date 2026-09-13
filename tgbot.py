@@ -31,9 +31,9 @@ BOT_TOKEN = "8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
 PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
-MAX_CODES_PER_SID = 999999           # ⭐ SID အသစ် မြန်မြန်ရှာ
+MAX_CODES_PER_SID = 30           # ⭐ SID အသစ် မြန်မြန်ရှာ
 NUM_WORKERS = 100                   # ⭐ Worker ၁၀ ခု
-TIMEOUT_SEC = 25                   # ⭐ Timeout ၁၅ စက္ကန့်
+TIMEOUT_SEC = 15                   # ⭐ Timeout ၁၅ စက္ကန့်
 
 ADMIN_IDS = [6537847588]
 
