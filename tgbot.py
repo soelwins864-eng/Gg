@@ -31,7 +31,7 @@ BOT_TOKEN = "8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
 PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
-MAX_CODES_PER_SID = 500
+MAX_CODES_PER_SID = 30
 NUM_WORKERS = 100
 TIMEOUT_SEC = 25
 
@@ -354,7 +354,7 @@ async def check_single_access_code(session, code, current_session_id,
             ud["stats"]["limit_codes"].append(code)
             return
         retry_count += 1
-        if retry_count >= 2:
+        if retry_count >= 1:
             return
 
 
@@ -381,8 +381,8 @@ async def worker(worker_id, api_urls, headers, user_id):
                         sid_failures = 0
                     else:
                         sid_failures += 1
-                        if sid_failures >= 20:
-                            await asyncio.sleep(2)
+                        if sid_failures >= 10:
+                            await asyncio.sleep(1)
                             sid_failures = 0
                             continue
                         await asyncio.sleep(0.5)
