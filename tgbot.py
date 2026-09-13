@@ -31,7 +31,7 @@ BOT_TOKEN = "8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
 PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
 MAX_CODES_PER_SESSION = 999999999
-MAX_CODES_PER_SID = 30
+MAX_CODES_PER_SID = 500
 NUM_WORKERS = 100
 TIMEOUT_SEC = 25
 
@@ -473,7 +473,7 @@ async def run_user_scanner(context, user_id):
                         context.bot.edit_message_text(
                             chat_id=user_id, message_id=ud["dash_msg_id"],
                             text=text, reply_markup=InlineKeyboardMarkup(keyboard)),
-                        timeout=25.0
+                        timeout=30.0
                     )
                     print(f"[DASHBOARD] Updated: tried={stats['tried']}, hits={len(stats['valid_codes'])}")
                 except asyncio.TimeoutError:
