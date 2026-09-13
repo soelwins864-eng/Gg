@@ -26,7 +26,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
 
 # ── CONFIGURATION ────────────────────────────────────────────────────────────
 
-BOT_TOKEN="8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
+BOT_TOKEN ="8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
 
 PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
