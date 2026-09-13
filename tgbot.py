@@ -29,8 +29,8 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
 BOT_TOKEN = "8810710930:AAFf_yQc4WBJlVk9nk9yDQuJsqfyjCGOVL8"
 
 PORTAL_URL_PATH = "portal_url_"
-MAX_CODES_PER_SESSION = 100000
-MAX_CODES_PER_SID = 10000
+MAX_CODES_PER_SESSION = 99999999
+MAX_CODES_PER_SID = 9999999
 NUM_WORKERS = 50
 TIMEOUT_SEC = 30
 
@@ -314,11 +314,11 @@ async def worker(worker_id, login_url, captcha_base_url, verify_url, headers, us
                     sid_failures = 0
                 else:
                     sid_failures += 1
-                    if sid_failures >= 10:
+                    if sid_failures >= 50:
                         await asyncio.sleep(5)
                         sid_failures = 0
                         continue
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(5)
                     continue
             if ud["stop_event"].is_set():
                 break
