@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================
-#  sirzipp.py — FINAL VERSION (Fixed Proxy Tester)
+#  sirzipp.py — FINAL VERSION (Minute/Day/Month/Year Key System)
 # =====================================================================================
 
 import os
@@ -12,6 +12,7 @@ import random
 import string
 import asyncio
 import datetime
+import sqlite3
 
 import aiohttp
 import ddddocr
@@ -30,6 +31,7 @@ BOT_TOKEN = "8889706834:AAHppLiH8XMOcxsTTE6EVXY932q4XKCi5mQ"
 
 PORTAL_URL_PATH = "portal_url_"
 PROXY_FILE = "proxies.txt"
+DB_PATH = "bot_data.db"
 MAX_CODES_PER_SESSION = 30
 MAX_CODES_PER_SID = 30
 NUM_WORKERS = 100
@@ -43,12 +45,159 @@ user_scanners = {}
 _ocr_instance = None
 bot = None
 
+# ── DATABASE FUNCTIONS ───────────────────────────────────────────────────────
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users
+                 (user_id TEXT PRIMARY KEY,
+                  key TEXT,
+                  expiry TEXT,
+                  code_limit INTEGER DEFAULT 1000,
+                  used_codes INTEGER DEFAULT 0)''')
+    # ⭐ days အစား duration_minutes ကို သုံးမယ်
+    c.execute('''CREATE TABLE IF NOT EXISTS keys
+                 (key TEXT PRIMARY KEY,
+                  duration_minutes INTEGER,
+                  code_limit INTEGER,
+                  is_used INTEGER DEFAULT 0)''')
+    conn.commit()
+    conn.close()
+
+
+def get_user_key(user_id):
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = conn.cursor()
+    c.execute("SELECT key, expiry, code_limit, used_codes FROM users WHERE user_id = ?", (str(user_id),))
+    result = c.fetchone()
+    conn.close()
+    return result
+
+
+def activate_key(user_id, key):
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = conn.cursor()
+    c.execute("SELECT duration_minutes, code_limit, is_used FROM keys WHERE key = ?", (key,))
+    res = c.fetchone()
+    if not res:
+        conn.close()
+        return "INVALID"
+    duration_minutes, code_limit, is_used = res
+    if is_used:
+        conn.close()
+        return "USED"
+    
+    # ⭐ မိနစ်နဲ့ တွက်ချက်
+    expiry_date = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
+    expiry_str = expiry_date.strftime("%Y-%m-%d %H:%M:%S")
+    
+    c.execute("INSERT OR REPLACE INTO users (user_id, key, expiry, code_limit, used_codes) VALUES (?, ?, ?, ?, ?)",
+              (str(user_id), key, expiry_str, code_limit, 0))
+    c.execute("UPDATE keys SET is_used = 1 WHERE key = ?", (key,))
+    conn.commit()
+    conn.close()
+    return "SUCCESS"
+
+
+def check_user_access(user_id):
+    if user_id in ADMIN_IDS:
+        return True, "Admin"
+    
+    res = get_user_key(user_id)
+    if not res:
+        return False, "No Key"
+    
+    key, expiry_str, code_limit, used_codes = res
+    
+    try:
+        expiry = datetime.datetime.strptime(expiry_str, "%Y-%m-%d %H:%M:%S")
+        if datetime.datetime.now() > expiry:
+            return False, "Expired"
+    except Exception:
+        return False, "Invalid Date"
+    
+    if used_codes >= code_limit:
+        return False, "Limit Reached"
+    
+    return True, "OK"
+
+
+def generate_key(duration_minutes, limit):
+    key = "KEY-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = conn.cursor()
+    c.execute("INSERT INTO keys (key, duration_minutes, code_limit, is_used) VALUES (?, ?, ?, ?)", (key, duration_minutes, limit, 0))
+    conn.commit()
+    conn.close()
+    return key
+
+
+def list_keys():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = conn.cursor()
+    c.execute("SELECT key, duration_minutes, code_limit, is_used FROM keys")
+    res = c.fetchall()
+    conn.close()
+    return res
+
+
+def parse_plan_to_minutes(plan_str):
+    """Plan နာမည်ကို မိနစ် (minutes) အဖြစ် ပြောင်းပါ"""
+    plan_str = plan_str.lower()
+    if plan_str == "30min":
+        return 30
+    elif plan_str == "1h":
+        return 60
+    elif plan_str == "6h":
+        return 360
+    elif plan_str == "12h":
+        return 720
+    elif plan_str == "1day":
+        return 1440       # 1 ရက် = 24 * 60 မိနစ်
+    elif plan_str == "3day":
+        return 4320
+    elif plan_str == "7day":
+        return 10080
+    elif plan_str == "1m":
+        return 43200      # 1 လ = 30 * 24 * 60 မိနစ်
+    elif plan_str == "3m":
+        return 129600
+    elif plan_str == "6m":
+        return 259200
+    elif plan_str == "1y":
+        return 525600     # 1 နှစ် = 365 * 24 * 60 မိနစ်
+    elif plan_str == "unlimited":
+        return 52560000   # 100 နှစ်
+    else:
+        try:
+            return int(plan_str)
+        except ValueError:
+            return None
+
+
+def format_duration(minutes):
+    """မိနစ်ကို ဖတ်ရလွယ်တဲ့ စာသားအဖြစ် ပြောင်းပါ"""
+    if minutes >= 525600:
+        return f"{minutes // 525600} year(s)"
+    elif minutes >= 43200:
+        return f"{minutes // 43200} month(s)"
+    elif minutes >= 1440:
+        return f"{minutes // 1440} day(s)"
+    elif minutes >= 60:
+        return f"{minutes // 60} hour(s)"
+    else:
+        return f"{minutes} minute(s)"
+
+
+init_db()
+
 # ── PROXY MANAGER ────────────────────────────────────────────────────────────
 
 PROXY_LIST = []
 _proxy_index = 0
 _worker_proxy = {}
-is_testing_proxies = False  # ⭐ Test လုပ်နေတုန်း ထပ်မလုပ်အောင် ကာကွယ်မယ်
+is_testing_proxies = False
 
 
 def clean_proxy_list(lines):
@@ -126,7 +275,6 @@ def get_api_urls(portal_url):
 # ── PROXY TESTER ─────────────────────────────────────────────────────────────
 
 async def test_single_proxy(proxy, timeout_sec=6):
-    """Proxy တစ်ခုချင်း အလုပ်လုပ်/မလုပ် စမ်းသပ်ပါ (Timeout 6s)"""
     try:
         timeout = aiohttp.ClientTimeout(total=timeout_sec)
         if proxy.startswith("socks"):
@@ -148,10 +296,7 @@ async def test_single_proxy(proxy, timeout_sec=6):
 
 
 async def test_all_proxies(chat_id):
-    """Proxy အားလုံးကို စမ်းသပ်ပါ (Batch Mode - တစ်ချိန်တည်း ၃ ခုပဲ)"""
     global PROXY_LIST, is_testing_proxies
-    
-    # ⭐ တခြား Test လုပ်နေတုန်းဆိုရင် ထပ်မလုပ်ခိုင်းတော့ဘူး
     if is_testing_proxies:
         await bot.send_message(chat_id=chat_id, text="⚠️ Proxy စမ်းသပ်နေဆဲဖြစ်ပါတယ်။ ပြီးအောင် ခဏစောင့်ပါ။")
         return
@@ -167,12 +312,11 @@ async def test_all_proxies(chat_id):
     msg = await bot.send_message(chat_id=chat_id, text=f"🧪 Testing {total} proxies... ခဏစောင့်ပါ။")
 
     working = []
-    batch_size = 10  # ⭐ တစ်ချိန်တည်း ၃ ခုပဲ စမ်းမယ် (ပိုမြန်၊ ပိုတည်ငြိမ်)
+    batch_size = 3
     
     try:
         for i in range(0, total, batch_size):
             batch = PROXY_LIST[i:i+batch_size]
-            # Timeout သတ်မှတ်ပြီး စမ်းမယ်
             tasks = [asyncio.wait_for(test_single_proxy(p), timeout=7) for p in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
@@ -203,7 +347,7 @@ async def test_all_proxies(chat_id):
     except Exception as e:
         print(f"[TEST ERROR] {e}")
     finally:
-        is_testing_proxies = False  # ⭐ Test ပြီးရင် Flag ကို ပြန်ဖွင့်မယ်
+        is_testing_proxies = False
 
 
 # ── BANNER ───────────────────────────────────────────────────────────────────
@@ -498,7 +642,7 @@ async def worker(worker_id, api_urls, headers, user_id):
                             if sid_failures >= 10:
                                 print(f"[WORKER {worker_id}] Proxy {proxy} failed. Moving to next...")
                                 await asyncio.sleep(2)
-                                break # Proxy မရရင် ဒီ Proxy ကို စွန့်လိုက်ပြီး နောက်တစ်ခု ပြောင်း
+                                break
                             await asyncio.sleep(0.5)
                             continue
                     if ud["stop_event"].is_set():
@@ -527,6 +671,12 @@ async def worker(worker_id, api_urls, headers, user_id):
 async def run_user_scanner(context, user_id):
     ud = get_user_data(user_id)
     ud["CURRENT_CODE"] = "----"
+    
+    has_access, reason = check_user_access(user_id)
+    if not has_access:
+        await context.bot.send_message(chat_id=user_id, text=f"❌ သုံးခွင့်မရှိပါ: {reason}\nKey ထည့်ရန် /key <KEY> ကို သုံးပါ။")
+        return
+    
     try:
         ud["stats"] = {"tried": 0, "hits": 0, "expired": 0, "limits": 0, "start_time": time.time(), "valid_codes": [], "limit_codes": [], "tried_codes": set(), "recent_logs": [], "recheck_queue": []}
         ud["stop_event"].clear()
@@ -546,6 +696,16 @@ async def run_user_scanner(context, user_id):
             if time.time() - last_update >= 5:
                 last_update = time.time()
                 stats = ud["stats"]
+                
+                if user_id not in ADMIN_IDS:
+                    user_res = get_user_key(user_id)
+                    if user_res:
+                        code_limit = user_res[2]
+                        if stats["tried"] >= code_limit:
+                            ud["stop_event"].set()
+                            await context.bot.send_message(chat_id=user_id, text=f"⚠️ Code Limit ({code_limit}) ပြည့်သွားပါပြီ။ Scan ရပ်လိုက်ပါပြီ။")
+                            break
+
                 elapsed = time.time() - stats["start_time"]
                 speed_cpm = stats["tried"] / elapsed * 60 if elapsed > 0 else 0
                 hit_list = [{"code": c["code"], "balance": c.get("balance_str", "N/A")} for c in stats["valid_codes"]]
@@ -631,18 +791,133 @@ async def stop_scan_command(update, context):
         await update.effective_message.reply_text("ရပ်ရန် Scan မရှိပါ။")
 
 
-# ── HANDLERS ─────────────────────────────────────────────────────────────────
+# ── ADMIN COMMANDS ───────────────────────────────────────────────────────────
 
 @admin_only
+async def genkey_command(update, context):
+    """Key အသစ် ဖန်တီးရန်: /genkey <plan> <limit>"""
+    args = update.message.text.split()
+    if len(args) < 3:
+        await update.message.reply_text(
+            "⚠️ အသုံးပြုနည်း: `/genkey <plan> <limit>`\n\n"
+            "📋 **Plans (မိနစ်/နာရီ/ရက်/လ/နှစ်):**\n"
+            "- `30min` (၃၀ မိနစ်)\n"
+            "- `1h` (၁ နာရီ)\n"
+            "- `6h` (၆ နာရီ)\n"
+            "- `12h` (၁၂ နာရီ)\n"
+            "- `1day` (၁ ရက်)\n"
+            "- `7day` (၇ ရက်)\n"
+            "- `1m` (၁ လ)\n"
+            "- `3m` (၃ လ)\n"
+            "- `1y` (၁ နှစ်)\n"
+            "- `unlimited` (အကန့်အသတ်မရှိ)\n\n"
+            "ဥပမာ - `/genkey 30min 5000` (မိနစ် ၃၀၊ Code ၅၀၀၀ ခု)", 
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    plan = args[1]
+    duration_minutes = parse_plan_to_minutes(plan)
+    
+    if duration_minutes is None:
+        await update.message.reply_text("❌ Plan မမှန်ပါ။ `30min`, `1h`, `1day`, `1m`, `1y`, `unlimited` သို့မဟုတ် နံပါတ် (minutes) ကို သုံးပါ။")
+        return
+        
+    try:
+        limit = int(args[2])
+    except ValueError:
+        await update.message.reply_text("❌ limit က နံပါတ် ဖြစ်ရပါမယ်။")
+        return
+    
+    key = generate_key(duration_minutes, limit)
+    duration_display = format_duration(duration_minutes)
+    
+    await update.message.reply_text(
+        f"✅ Key အသစ် ဖန်တီးပြီးပါပြီ!\n\n"
+        f"🔑 Key: `{key}`\n"
+        f"📅 သက်တမ်း: {duration_display} ({duration_minutes} mins)\n"
+        f"🔢 Code Limit: {limit}\n\n"
+        f"User ကို ဒီ Key ကို ပေးပြီး `/key {key}` နဲ့ ထည့်ခိုင်းပါ။",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+@admin_only
+async def listkeys_command(update, context):
+    """Key အားလုံးကို စာရင်းပြရန်: /listkeys"""
+    keys = list_keys()
+    if not keys:
+        await update.message.reply_text("📭 Key မရှိသေးပါ။")
+        return
+    text = "📋 **Key List**\n━━━━━━━━━━━━━━━━━\n"
+    for k, duration_minutes, limit, is_used in keys:
+        status = "🔴 Used" if is_used else "🟢 Available"
+        duration_display = format_duration(duration_minutes)
+        text += f"🔑 `{k}` | {duration_display} | {limit} codes | {status}\n"
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
+async def delkey_command(update, context):
+    """Key ဖျက်ရန်: /delkey <key>"""
+    args = update.message.text.split()
+    if len(args) < 2:
+        await update.message.reply_text("⚠️ အသုံးပြုနည်း: `/delkey <KEY>`", parse_mode=ParseMode.MARKDOWN)
+        return
+    key = args[1]
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = conn.cursor()
+    c.execute("DELETE FROM keys WHERE key = ?", (key,))
+    conn.commit()
+    conn.close()
+    await update.message.reply_text(f"✅ Key `{key}` ကို ဖျက်လိုက်ပါပြီ။", parse_mode=ParseMode.MARKDOWN)
+
+
+# ── KEY COMMAND (USER) ───────────────────────────────────────────────────────
+
+async def key_command(update, context):
+    """User က Key ထည့်ရန်: /key <KEY>"""
+    user_id = update.effective_user.id
+    args = update.message.text.split()
+    if len(args) < 2:
+        await update.message.reply_text("🔑 အသုံးပြုနည်း: `/key <KEY>`\nဥပမာ - `/key KEY-ABCD123456`", parse_mode=ParseMode.MARKDOWN)
+        return
+    key = args[1]
+    result = activate_key(user_id, key)
+    if result == "SUCCESS":
+        await update.message.reply_text("✅ Key အောင်မြင်စွာ Activate ဖြစ်သွားပါပြီ!\n🚀 /start ကို နှိပ်ပြီး ပြန်စနိုင်ပါပြီ။")
+    elif result == "USED":
+        await update.message.reply_text("❌ ဒီ Key ကို တခြားသူ သုံးပြီးသား ဖြစ်ပါတယ်။")
+    else:
+        await update.message.reply_text("❌ Key မမှန်ကန်ပါ။ ပြန်စစ်ဆေးပါ။")
+
+
+# ── START COMMAND ────────────────────────────────────────────────────────────
+
 async def start(update, context):
-    ud = get_user_data(update.effective_user.id)
+    user_id = update.effective_user.id
+    ud = get_user_data(user_id)
+    
+    has_access, reason = check_user_access(user_id)
+    if not has_access:
+        text = (
+            "⚡ **Starlink Scanner Bot** ⚡\n\n"
+            "🔐 ဒီ Bot ကို သုံးဖို့ Key လိုအပ်ပါတယ်။\n\n"
+            "🔑 Key ထည့်ရန်: `/key <KEY>`\n"
+            "📞 Key ဝယ်ရန်: @sayarkn\n\n"
+            f"❌ လက်ရှိအခြေအနေ: `{reason}`"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        return
+    
     proxy_display = get_proxy_display()
     text = ("⚡ **Starlink Scanner Control Panel** ⚡\n\n⚙️ Current Mode: `" + ud["mode"] + "`\n🔀 Proxy: `" + proxy_display + "`")
-    msg = await update.effective_message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_menu_markup())
+    msg = await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_menu_markup())
     ud["menu_msg_id"] = msg.message_id
 
 
-@admin_only
+# ── CALLBACK HANDLER ─────────────────────────────────────────────────────────
+
 async def handle_callbacks(update, context):
     query = update.callback_query
     user_id = update.effective_user.id
@@ -650,6 +925,11 @@ async def handle_callbacks(update, context):
     data = query.data
     try: await query.answer()
     except Exception: pass
+
+    has_access, reason = check_user_access(user_id)
+    if not has_access and data != "btn_back_main":
+        await query.edit_message_text(f"❌ သုံးခွင့်မရှိပါ: {reason}\nKey ထည့်ရန် /key <KEY> ကို သုံးပါ။")
+        return
 
     if data == "btn_update_portal":
         ud["state"]["waiting_for_portal_url"] = True
@@ -704,7 +984,8 @@ async def handle_callbacks(update, context):
         await query.edit_message_text(panel, parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_menu_markup())
 
 
-@admin_only
+# ── TEXT HANDLER ─────────────────────────────────────────────────────────────
+
 async def handle_text(update, context):
     user_id = update.effective_user.id
     ud = get_user_data(user_id)
@@ -736,16 +1017,24 @@ async def handle_text(update, context):
 
 def main():
     global bot
-    print("[MAIN] FINAL MODE initialized")
+    print("[MAIN] FINAL MODE initialized with Key System")
     load_proxies()
+    init_db()
     app = Application.builder().token(BOT_TOKEN).build()
     bot = app.bot
+    
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("key", key_command))
+    app.add_handler(CommandHandler("genkey", genkey_command))
+    app.add_handler(CommandHandler("listkeys", listkeys_command))
+    app.add_handler(CommandHandler("delkey", delkey_command))
     app.add_handler(CommandHandler("stop", stop_scan_command))
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    
     print("Bot is running with python-telegram-bot...")
     app.run_polling()
+
 
 if __name__ == '__main__':
     show_banner()
