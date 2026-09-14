@@ -6,3 +6,4 @@ aiogram
 uvloop
 requests
 flask
+aiohttp_socks
