@@ -35,7 +35,7 @@ DB_PATH = "bot_data.db"
 MAX_CODES_PER_SESSION = 30
 MAX_CODES_PER_SID = 30
 NUM_WORKERS = 100
-TIMEOUT_SEC = 15
+TIMEOUT_SEC = 25
 
 ADMIN_IDS = [6537847588]
 
@@ -639,7 +639,7 @@ async def worker(worker_id, api_urls, headers, user_id):
                             sid_failures = 0
                         else:
                             sid_failures += 1
-                            if sid_failures >= 20:
+                            if sid_failures >= 10:
                                 print(f"[WORKER {worker_id}] Proxy {proxy} failed. Moving to next...")
                                 await asyncio.sleep(2)
                                 break
@@ -721,7 +721,7 @@ async def run_user_scanner(context, user_id):
                         "\n━━━━━━━━━━━━━━━━━\n🔥 Last: " + last_log)
                 keyboard = [[InlineKeyboardButton("🛑 Stop", callback_data="stop_scan")]]
                 try:
-                    await asyncio.wait_for(context.bot.edit_message_text(chat_id=user_id, message_id=ud["dash_msg_id"], text=text, reply_markup=InlineKeyboardMarkup(keyboard)), timeout=30.0)
+                    await asyncio.wait_for(context.bot.edit_message_text(chat_id=user_id, message_id=ud["dash_msg_id"], text=text, reply_markup=InlineKeyboardMarkup(keyboard)), timeout=20)
                     print(f"[DASHBOARD] Updated: tried={stats['tried']}, hits={len(stats['valid_codes'])}, proxy={proxy_display}")
                 except asyncio.TimeoutError:
                     print(f"[DASHBOARD] Timeout: tried={stats['tried']}")
