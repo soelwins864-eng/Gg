@@ -34,8 +34,8 @@ PROXY_FILE = "proxies.txt"
 DB_PATH = "bot_data.db"
 MAX_CODES_PER_SESSION = 30
 MAX_CODES_PER_SID = 30
-NUM_WORKERS = 100
-TIMEOUT_SEC = 25
+NUM_WORKERS = 50
+TIMEOUT_SEC = 15
 
 ADMIN_IDS = [6537847588]
 
@@ -639,9 +639,9 @@ async def worker(worker_id, api_urls, headers, user_id):
                             sid_failures = 0
                         else:
                             sid_failures += 1
-                            if sid_failures >= 10:
+                            if sid_failures >= 20:
                                 print(f"[WORKER {worker_id}] Proxy {proxy} failed. Moving to next...")
-                                await asyncio.sleep(2)
+                                await asyncio.sleep(1)
                                 break
                             await asyncio.sleep(0.5)
                             continue
