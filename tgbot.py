@@ -639,7 +639,7 @@ async def worker(worker_id, api_urls, headers, user_id):
                             sid_failures = 0
                         else:
                             sid_failures += 1
-                            if sid_failures >= 50:
+                            if sid_failures >= 10:
                                 print(f"[WORKER {worker_id}] Proxy {proxy} failed. Moving to next...")
                                 await asyncio.sleep(2)
                                 break
