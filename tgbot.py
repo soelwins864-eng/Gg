@@ -573,7 +573,7 @@ async def run_user_scanner(context, user_id):
         last_update = 0
         while not ud["stop_event"].is_set():
             if all(t.done() for t in worker_tasks): break
-            if time.time() - last_update >= 15: # ⭐ ၁၅ စက္ကန့်တစ်ခါ Update
+            if time.time() - last_update >= 5: # ⭐ ၁၅ စက္ကန့်တစ်ခါ Update
                 last_update = time.time()
                 stats = ud["stats"]
                 
