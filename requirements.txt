@@ -1,9 +1,6 @@
 pyTelegramBotAPI
 aiohttp
+aiohttp_socks
 opencv-python-headless
 ddddocr
-aiogram
-uvloop
-requests
-flask
-aiohttp_socks
+numpy
