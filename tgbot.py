@@ -20,7 +20,7 @@ from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 import aiohttp
 from aiohttp_socks import ProxyConnector
 
-from telebot import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import (Application, CommandHandler, MessageHandler,
                           CallbackQueryHandler, filters)
