@@ -110,7 +110,7 @@ def get_proxy_manager():
 
 # ─────────────────────────── PROXY TEST ───────────────────────────
 
-async def test_single_proxy(proxy, timeout_sec=8):
+async def test_single_proxy(proxy, timeout_sec=20):
     try:
         timeout = aiohttp.ClientTimeout(total=timeout_sec)
         if proxy.startswith("socks"):
@@ -147,7 +147,7 @@ async def test_all_proxies(chat_id, context):
 
     msg = await context.bot.send_message(chat_id=chat_id, text=f"🧪 Testing {total} proxies... ခဏစောင့်ပါ။")
     working = []
-    batch_size = 3
+    batch_size = 1000
     try:
         for i in range(0, total, batch_size):
             batch = pm.proxies[i:i+batch_size]
