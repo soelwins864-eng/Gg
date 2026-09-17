@@ -4,3 +4,4 @@ aiohttp_socks
 opencv-python-headless
 ddddocr
 numpy
+Pillow
