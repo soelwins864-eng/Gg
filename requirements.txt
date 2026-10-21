@@ -1,6 +1,7 @@
 python-telegram-bot
 aiohttp
 aiohttp-socks
+requests 
 opencv-python-headless
 ddddocr
 numpy
