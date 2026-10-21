@@ -19,7 +19,6 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 BOT_TOKEN = "8651415048:AAFxOLQyvHk2d9l43aTBrDO6bBXb2flA5kM"
 PROXYSCRAPE_API_KEY = "czDaKHXdjCKRWuo1NtQOHbmOgYMqCD0UGWYgfWsHB1PdNtLIvc0oYIGk0RIpih4B"
 
-# ⚠️ VPS အတွက် သင့်တင့်တဲ့ ပမာဏ (5000 က အရမ်းများတယ်)
 CONCURRENCY = 1000
 HTTP_CHECK_TIMEOUT_SECONDS = 5.0
 SOCKS_CHECK_TIMEOUT_SECONDS = 6.0
@@ -113,6 +112,7 @@ load_key_store()
 scanning_jobs = {}
 scan_tasks = {}
 user_selected_type = {}
+stop_events = {} # ⭐ ချက်ချင်းရပ်ဖို့ Event သုံးမယ်
 
 def is_admin(user_id: int) -> bool:
     return int(user_id) == int(ADMIN_ID) and int(ADMIN_ID) != 0
@@ -215,6 +215,7 @@ async def get_geoip(session, ip):
         pass
     return "🌍"
 
+# ⭐ 4-Pass Check Function
 async def check_proxy_alive_with_ping(session, proxy, proxy_type="http"):
     start_time = time.monotonic()
     scheme = proxy.partition("://")[0].lower()
@@ -374,28 +375,33 @@ async def run_manual_scan(msg, context, chat_id, raw_text):
         await msg.edit_text("⚠️ No valid proxies found in your text.")
         return
 
-    await msg.edit_text(f"🌌🚀 <b>CHECKING CUSTOM LIST</b>\n📦 Total: {total}", parse_mode=ParseMode.HTML, reply_markup=stop_keyboard)
+    await msg.edit_text(f"🌌🚀 <b>CHECKING CUSTOM LIST (4-PASS)</b>\n📦 Total: {total}", parse_mode=ParseMode.HTML, reply_markup=stop_keyboard)
 
     checked = 0
     found = 0
     found_proxy_records = []
     semaphore = asyncio.Semaphore(CONCURRENCY)
     start_time = time.time()
+    
+    if chat_id in stop_events: stop_events[chat_id].clear()
+    else: stop_events[chat_id] = asyncio.Event()
 
     async def worker(proxy, session):
         nonlocal checked, found
-        if not scanning_jobs.get(chat_id, False): return
+        if stop_events[chat_id].is_set(): return
+        
         async with semaphore:
-            try:
-                is_ok, ping = await asyncio.wait_for(check_proxy_alive_with_ping(session, proxy, "all"), timeout=PROXY_CHECK_HARD_TIMEOUT_SECONDS)
-            except asyncio.TimeoutError:
-                is_ok, ping = False, 0
-
-            if is_ok:
+            # ⭐ ၄ ကြိမ် စစ်မယ်
+            is_ok = False
+            ping = 0
+            for _ in range(4):
+                if stop_events[chat_id].is_set(): break
                 try:
                     is_ok, ping = await asyncio.wait_for(check_proxy_alive_with_ping(session, proxy, "all"), timeout=PROXY_CHECK_HARD_TIMEOUT_SECONDS)
                 except asyncio.TimeoutError:
                     is_ok, ping = False, 0
+                
+                if not is_ok: break # တစ်ခါမှ မှားရင် ချက်ချင်း ပစ်
 
             checked += 1
             if is_ok:
@@ -408,9 +414,13 @@ async def run_manual_scan(msg, context, chat_id, raw_text):
         tasks = [worker(p, session) for p in proxies]
         await asyncio.gather(*tasks)
 
+    if stop_events[chat_id].is_set():
+        await msg.edit_text("🛑 Scan stopped by user.")
+        return
+
     if found_proxy_records:
         found_proxy_records.sort()
-        text = f"✅ <b>FINISHED</b>\nChecked: {checked}\nLive: <b>{found}</b>\n\n"
+        text = f"✅ <b>FINISHED (4-PASS VERIFIED)</b>\nChecked: {checked}\nLive: <b>{found}</b>\n\n"
         for ping, p, flag in found_proxy_records[:100]:
             text += f"• <code>{html.escape(p)}</code> · {ping} ms · {flag}\n"
 
@@ -436,20 +446,17 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
             await query.edit_message_text(f"🌌⚡ <b>NEBULA · PIPELINE SCAN</b> ⚡🌌\n📡 Mode: <b>{display_name}</b>\n⏳ Starting pipeline...", parse_mode=ParseMode.HTML, reply_markup=stop_keyboard)
         except Exception: pass
 
-        # ၁။ Queue ဖန်တီး
         proxy_queue = asyncio.Queue(maxsize=50000)
-        stop_event = asyncio.Event()
         
-        # ၂။ Stats
+        if chat_id in stop_events: stop_events[chat_id].clear()
+        else: stop_events[chat_id] = asyncio.Event()
+            
         stats = {"sourced": 0, "checked": 0, "found": 0}
         found_proxy_records = []
         formatted_items = []
         start_time = time.time()
-        
-        # ၃။ UI Updater Variables
         speed_history = []
 
-        # ၄။ Source Producer (queue ထဲ ထည့်)
         async def source_producer(session):
             registry = PROXY_SOURCE_REGISTRY
             if proxy_type not in ("all", "auth"):
@@ -460,7 +467,7 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
             limit_count = MAX_ALL_SCAN_CANDIDATES if proxy_type in ("all", "auth") else MAX_SINGLE_SCAN_CANDIDATES
 
             async def fetch_and_enqueue(url, default_proto, category):
-                if stop_event.is_set(): return
+                if stop_events[chat_id].is_set(): return
                 async with sem:
                     try:
                         async with session.get(url, timeout=timeout) as res:
@@ -491,7 +498,7 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
                             record_source_result(url, len(result))
                             
                             for p in result:
-                                if stop_event.is_set(): break
+                                if stop_events[chat_id].is_set(): break
                                 if stats["sourced"] >= limit_count: break
                                 await proxy_queue.put(p)
                                 stats["sourced"] += 1
@@ -501,14 +508,16 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
             tasks = [fetch_and_enqueue(url, proto, cat) for url, proto, cat in registry]
             await asyncio.gather(*tasks)
             
-            # ပြီးရင် sentinel ထည့် (worker တွေ ရပ်ဖို့)
             for _ in range(CONCURRENCY):
                 await proxy_queue.put(None)
 
-        # ၅။ Worker Consumers
         async def proxy_worker(session):
-            while not stop_event.is_set():
-                proxy = await proxy_queue.get()
+            while not stop_events[chat_id].is_set():
+                try:
+                    proxy = await asyncio.wait_for(proxy_queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                
                 if proxy is None:
                     proxy_queue.task_done()
                     break
@@ -518,15 +527,11 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
                     proxy_queue.task_done()
                     continue
 
-                try:
-                    is_ok, ping = await asyncio.wait_for(
-                        check_proxy_alive_with_ping(session, proxy, proxy_type), 
-                        timeout=PROXY_CHECK_HARD_TIMEOUT_SECONDS
-                    )
-                except asyncio.TimeoutError:
-                    is_ok, ping = False, 0
-
-                if is_ok:
+                # ⭐ ၄ ကြိမ် စစ်မယ်
+                is_ok = False
+                ping = 0
+                for _ in range(4):
+                    if stop_events[chat_id].is_set(): break
                     try:
                         is_ok, ping = await asyncio.wait_for(
                             check_proxy_alive_with_ping(session, proxy, proxy_type), 
@@ -534,6 +539,8 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
                         )
                     except asyncio.TimeoutError:
                         is_ok, ping = False, 0
+                    
+                    if not is_ok: break
 
                 stats["checked"] += 1
                 if is_ok and 0 < ping <= FAST_PROXY_MAX_LATENCY_MS:
@@ -541,27 +548,25 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
                     flag = await get_geoip(session, host)
                     stats["found"] += 1
                     found_proxy_records.append((ping, proxy, flag))
-                    formatted_items.append((ping, f"• <code>{proxy}</code> · {ping}ms · {flag} · 2/2"))
+                    formatted_items.append((ping, f"• <code>{proxy}</code> · {ping}ms · {flag} · 4/4"))
                 
                 proxy_queue.task_done()
 
-        # ၆။ UI Updater (3.5s interval to avoid Telegram rate limits)
         async def ui_updater(msg):
-            while not stop_event.is_set():
+            while not stop_events[chat_id].is_set():
                 await asyncio.sleep(3.5)
-                if stop_event.is_set(): break
+                if stop_events[chat_id].is_set(): break
                 
                 elapsed = time.time() - start_time
                 current_speed = int(stats["checked"] / elapsed) if elapsed > 0 else 0
                 
-                # Moving average for stable speed display
                 speed_history.append(current_speed)
                 if len(speed_history) > 3:
                     speed_history.pop(0)
                 avg_speed = sum(speed_history) // len(speed_history) if speed_history else 0
 
                 header = (
-                    f"🌐 KYAWZIN PROXY · PIPELINE\n"
+                    f"🌐 KYAWZIN PROXY · PIPELINE (4-PASS)\n"
                     f"🛰 Mode: {display_name}\n"
                     f"📥 Sourced: {stats['sourced']:,} | 📦 Checked: {stats['checked']:,}\n"
                     f"⚡ Speed: {avg_speed:,}/s | ✅ Live: {stats['found']}\n"
@@ -570,7 +575,6 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
                 
                 temp = []
                 current_len = len(header)
-                # Display top 20 fastest proxies found so far
                 for _, item in sorted(formatted_items, key=lambda r: r[0])[:20]:
                     item_len = len(item) + 1
                     if current_len + item_len < 3800:
@@ -581,10 +585,8 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
                 try:
                     await msg.edit_text(header + box, parse_mode=ParseMode.HTML, reply_markup=stop_keyboard)
                 except Exception:
-                    pass # Ignore rate limit errors
+                    pass
 
-        # ================= RUN =================
-        # ⚠️ Optimized Connector for high concurrency
         connector = aiohttp.TCPConnector(
             limit=CONCURRENCY,
             limit_per_host=0,
@@ -595,28 +597,25 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
         async with aiohttp.ClientSession(connector=connector) as session:
             msg = await query.edit_message_text("⏳ Starting pipeline engine...", reply_markup=stop_keyboard)
             
-            # UI task
             ui_task = asyncio.create_task(ui_updater(msg))
-            
-            # Producers & Consumers
             producer_task = asyncio.create_task(source_producer(session))
             worker_tasks = [asyncio.create_task(proxy_worker(session)) for _ in range(CONCURRENCY)]
             
-            # စောင့် (Producer ပြီးတဲ့အထိ)
             await producer_task
             
-            # Producer ပြီးရင် queue ထဲမှာ sentinel ရှိပြီးသား
-            # Worker တွေ အားလုံး ပြီးတဲ့အထိ စောင့်
             await asyncio.gather(*worker_tasks)
             
-            stop_event.set()
+            stop_events[chat_id].set()
             ui_task.cancel()
 
-        # ================= FINAL RESULTS =================
+        if stop_events[chat_id].is_set():
+             await msg.edit_text("🛑 Scan stopped by user.")
+             return
+
         ordered_proxy_results = sorted(found_proxy_records, key=lambda r: r[0])
         
         final_text = (
-            f"🌌 <b>NEBULA · PIPELINE COMPLETE</b>\n"
+            f"🌌 <b>NEBULA · PIPELINE COMPLETE (4-PASS)</b>\n"
             f"📥 Sourced: {stats['sourced']:,}\n"
             f"📦 Checked: {stats['checked']:,}\n"
             f"✅ Qualified: <b>{stats['found']}</b>\n"
@@ -631,7 +630,7 @@ async def run_proxy_scan(query, context, chat_id, proxy_type):
             file_bytes = io.BytesIO(file_content.encode("utf-8"))
             file_bytes.name = f"proxy_{proxy_type}.txt"
             try:
-                await context.bot.send_document(chat_id=chat_id, document=file_bytes, caption=f"📁 Live proxies: <b>{len(ordered_proxy_results)}</b> (Dual-Checked)", parse_mode=ParseMode.HTML)
+                await context.bot.send_document(chat_id=chat_id, document=file_bytes, caption=f"📁 Live proxies: <b>{len(ordered_proxy_results)}</b> (4-Pass Verified)", parse_mode=ParseMode.HTML)
             except Exception: pass
 
     except Exception as e:
@@ -731,17 +730,30 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         scan_tasks[chat_id] = asyncio.create_task(run_guarded_scan())
 
     elif data == "stop_scan":
+        # ⭐ ဒီနေရာမှာ Event ကို set လုပ်လိုက်တာနဲ့ ချက်ချင်း ရပ်သွားမယ်
+        if chat_id in stop_events:
+            stop_events[chat_id].set()
         scanning_jobs[chat_id] = False
-        try: await query.edit_message_text("🛑 <b>STOPPING SCAN</b>...", parse_mode=ParseMode.HTML)
+        
+        # Queue ထဲက အမှိုက်တွေ ရှင်းမယ်
+        try:
+            while not proxy_queue.empty():
+                proxy_queue.get_nowait()
+                proxy_queue.task_done()
+        except: pass
+
+        try: await query.edit_message_text("🛑 <b>SCAN STOPPED</b>\nAll pending checks cancelled.", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ BACK", callback_data="back_home")]]))
         except Exception: pass
 
     elif data == "back_home":
+        if chat_id in stop_events:
+            stop_events[chat_id].set()
         scanning_jobs[chat_id] = False
         try: await query.edit_message_text("🌌 <b>NEBULA</b>\n📡 Choose a protocol.", parse_mode=ParseMode.HTML, reply_markup=main_menu_markup())
         except Exception: pass
 
     elif data == "help":
-        try: await query.edit_message_text("📖 <b>HOW TO USE</b>\n1. Choose protocol or Auth mode.\n2. Tap START SCAN.\n3. Wait for results (Dual-Checked + GeoIP).", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️  BACK", callback_data="back_home")]]))
+        try: await query.edit_message_text("📖 <b>HOW TO USE (4-PASS)</b>\n1. Choose protocol or Auth mode.\n2. Tap START SCAN.\n3. Wait for results (4x Checked + GeoIP).", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️  BACK", callback_data="back_home")]]))
         except Exception: pass
 
 def main():
@@ -752,7 +764,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-    print("🤖 Proxy Scanner Bot Running... (Pipeline + UI Optimized)")
+    print("🤖 Proxy Scanner Bot Running... (4-Pass + Instant Stop)")
     app.run_polling(timeout=15, drop_pending_updates=True)
 
 if __name__ == "__main__":
